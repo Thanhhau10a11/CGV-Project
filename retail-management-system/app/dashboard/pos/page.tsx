@@ -18,79 +18,25 @@ import {
 } from "@/components/ui/dialog"
 import { useToast } from "@/components/ui/use-toast"
 
-// Sample product data
-const allProducts = [
-  {
-    id: 1,
-    name: "Popcorn Large",
-    category: "Food",
-    price: 5.99,
-    image: "/placeholder.svg",
-  },
-  {
-    id: 2,
-    name: "Coca Cola 500ml",
-    category: "Drinks",
-    price: 2.49,
-    image: "/placeholder.svg",
-  },
-  {
-    id: 3,
-    name: "Nachos with Cheese",
-    category: "Food",
-    price: 4.99,
-    image: "/placeholder.svg",
-  },
-  {
-    id: 4,
-    name: "Movie Souvenir Cup",
-    category: "Merchandise",
-    price: 9.99,
-    image: "/placeholder.svg",
-  },
-  {
-    id: 5,
-    name: "Caramel Popcorn",
-    category: "Food",
-    price: 6.99,
-    image: "/placeholder.svg",
-  },
-  {
-    id: 6,
-    name: "Bottled Water",
-    category: "Drinks",
-    price: 1.99,
-    image: "/placeholder.svg",
-  },
-  {
-    id: 7,
-    name: "Movie Poster",
-    category: "Merchandise",
-    price: 14.99,
-    image: "/placeholder.svg",
-  },
-  {
-    id: 8,
-    name: "Hot Dog",
-    category: "Food",
-    price: 3.99,
-    image: "/placeholder.svg",
-  },
-  {
-    id: 9,
-    name: "Combo #1 (Popcorn + Drink)",
-    category: "Combo",
-    price: 7.99,
-    image: "/placeholder.svg",
-  },
-  {
-    id: 10,
-    name: "Collectible Figurine",
-    category: "Merchandise",
-    price: 19.99,
-    image: "/placeholder.svg",
-  },
-]
+interface Category {
+  id: string | number
+  name: string
+}
+
+interface Product {
+  id: number
+  name: string
+  price: number
+  image: string
+  category: {
+    id: number
+    name: string
+    description: string
+    status: string
+    createdAt: string
+    updatedAt: string
+  }
+}
 
 interface CartItem {
   id: number
@@ -106,25 +52,98 @@ export default function POSPage() {
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false)
   const [amountPaid, setAmountPaid] = useState("")
   const [isMounted, setIsMounted] = useState(false)
+  const [products, setProducts] = useState<Product[]>([])
+  const [isLoading, setIsLoading] = useState(true)
   const { toast } = useToast()
 
   useEffect(() => {
     setIsMounted(true)
+    fetchProducts()
   }, [])
+
+  const fetchProducts = async () => {
+    try {
+      const token = localStorage.getItem("token")
+      if (!token) {
+        toast({
+          variant: "destructive",
+          title: "Lỗi xác thực",
+          description: "Vui lòng đăng nhập lại",
+        })
+        return
+      }
+
+      // Xây dựng URL với các tham số lọc
+      let url = "http://localhost:5000/api/products?"
+      if (searchTerm) url += `name=${encodeURIComponent(searchTerm)}&`
+      if (activeCategory !== "all") url += `category_id=${activeCategory}&`
+      url += `status=selling&` // Chỉ lấy sản phẩm đang bán
+      url += `min_stock=1&` // Chỉ lấy sản phẩm còn hàng
+      url += `page=1&limit=100` // Lấy nhiều sản phẩm để hiển thị
+
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error("Không thể lấy danh sách sản phẩm")
+      }
+
+      const data = await response.json()
+      
+      // Kiểm tra cấu trúc dữ liệu trả về
+      if (data && typeof data === 'object') {
+        if (Array.isArray(data)) {
+          // API trả về mảng sản phẩm trực tiếp
+          setProducts(data)
+        } else if (data.data && Array.isArray(data.data)) {
+          // API trả về dạng { data: [...] }
+          setProducts(data.data)
+        } else if (data.products && Array.isArray(data.products)) {
+          // API trả về dạng { products: [...] }
+          setProducts(data.products)
+        } else {
+          console.error("Dữ liệu API không đúng định dạng:", data)
+          setProducts([])
+        }
+      } else {
+        console.error("Dữ liệu API không hợp lệ:", data)
+        setProducts([])
+      }
+    } catch (error) {
+      console.error("Lỗi khi lấy sản phẩm:", error)
+      toast({
+        variant: "destructive",
+        title: "Lỗi",
+        description: "Không thể lấy danh sách sản phẩm",
+      })
+      setProducts([])
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   if (!isMounted) {
     return null
   }
 
-  const filteredProducts = allProducts.filter((product) => {
+  const filteredProducts = products.filter((product) => {
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesCategory = activeCategory === "all" || product.category === activeCategory
+    const matchesCategory = activeCategory === "all" || product.category.id === Number(activeCategory)
     return matchesSearch && matchesCategory
   })
 
-  const categories = ["all", "Food", "Drinks", "Merchandise", "Combo"]
+  const categories: Category[] = [
+    { id: "all", name: "Tất cả" },
+    ...Array.from(new Set(products.map(p => p.category.id))).map(id => {
+      const category = products.find(p => p.category.id === id)?.category
+      return { id, name: category?.name || "" }
+    })
+  ]
 
-  const addToCart = (product: (typeof allProducts)[0]) => {
+  const addToCart = (product: Product) => {
     setCart((prevCart) => {
       const existingItem = prevCart.find((item) => item.id === product.id)
       if (existingItem) {
@@ -155,39 +174,70 @@ export default function POSPage() {
   }
 
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0)
-  const tax = subtotal * 0.1 // 10% tax
-  const total = subtotal + tax
+  const total = subtotal // Bỏ thuế
 
-  const handleCheckout = () => {
+  const handleCheckout = async () => {
     const paid = Number.parseFloat(amountPaid)
     if (isNaN(paid) || paid < total) {
       toast({
         variant: "destructive",
-        title: "Invalid amount",
-        description: "Please enter a valid amount that covers the total",
+        title: "Số tiền không hợp lệ",
+        description: "Vui lòng nhập số tiền lớn hơn hoặc bằng tổng tiền",
       })
       return
     }
 
-    const change = paid - total
-    toast({
-      title: "Order completed",
-      description: `Change: $${change.toFixed(2)}`,
-    })
+    try {
+      const orderData = {
+        payment_method: "cash",
+        note: `Thanh toán tiền mặt: ${paid.toLocaleString('vi-VN')}đ, Tiền thừa: ${(paid - total).toLocaleString('vi-VN')}đ`,
+        total_amount: total,
+        products: cart.map(item => ({
+          product_id: item.id,
+          quantity: item.quantity,
+          unit_price: item.price
+        }))
+      }
 
-    // Create a new order
-    const newOrderId = Math.floor(1000 + Math.random() * 9000)
-    console.log("New order created:", {
-      id: newOrderId,
-      items: cart,
-      total,
-      date: new Date(),
-    })
+      const response = await fetch('http://localhost:5000/api/orders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+        body: JSON.stringify(orderData),
+      })
 
-    // Reset
-    setCart([])
-    setAmountPaid("")
-    setIsCheckoutOpen(false)
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Không thể tạo đơn hàng')
+      }
+      alert("Thanh toán thành công!")
+      toast({
+        title: "Thanh toán thành công",
+        description: (
+          <div className="space-y-1">
+            <p>Mã đơn hàng: {data.id}</p>
+            <p>Tổng tiền: {total.toLocaleString('vi-VN')}đ</p>
+            <p>Tiền nhận: {paid.toLocaleString('vi-VN')}đ</p>
+            <p>Tiền thừa: {(paid - total).toLocaleString('vi-VN')}đ</p>
+          </div>
+        ),
+      })
+
+      // Reset
+      setCart([])
+      setAmountPaid("")
+      setIsCheckoutOpen(false)
+    } catch (error) {
+      console.error('Checkout error:', error)
+      toast({
+        variant: "destructive",
+        title: "Lỗi",
+        description: error instanceof Error ? error.message : "Không thể tạo đơn hàng",
+      })
+    }
   }
 
   return (
@@ -206,7 +256,7 @@ export default function POSPage() {
                   <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
                     type="search"
-                    placeholder="Search products..."
+                    placeholder="Tìm kiếm sản phẩm..."
                     className="pl-8"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
@@ -218,35 +268,41 @@ export default function POSPage() {
               <Tabs defaultValue="all" value={activeCategory} onValueChange={setActiveCategory}>
                 <TabsList className="mb-4 flex flex-wrap">
                   {categories.map((category) => (
-                    <TabsTrigger key={category} value={category} className="capitalize">
-                      {category === "all" ? "All Products" : category}
+                    <TabsTrigger key={String(category.id)} value={String(category.id)} className="capitalize">
+                      {category.name}
                     </TabsTrigger>
                   ))}
                 </TabsList>
                 <TabsContent value={activeCategory} className="m-0">
-                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4">
-                    {filteredProducts.map((product) => (
-                      <Card
-                        key={product.id}
-                        className="cursor-pointer overflow-hidden transition-all hover:border-primary"
-                        onClick={() => addToCart(product)}
-                      >
-                        <div className="aspect-square w-full bg-muted">
-                          <img
-                            src={product.image || "/placeholder.svg"}
-                            alt={product.name}
-                            width={200}
-                            height={200}
-                            className="h-full w-full object-cover"
-                          />
-                        </div>
-                        <CardContent className="p-3">
-                          <div className="text-sm font-medium line-clamp-1">{product.name}</div>
-                          <div className="mt-1 font-bold">${product.price.toFixed(2)}</div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
+                  {isLoading ? (
+                    <div className="flex h-40 items-center justify-center">
+                      <p>Đang tải sản phẩm...</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4">
+                      {filteredProducts.map((product) => (
+                        <Card
+                          key={product.id}
+                          className="cursor-pointer overflow-hidden transition-all hover:border-primary"
+                          onClick={() => addToCart(product)}
+                        >
+                          <div className="aspect-square w-full bg-muted">
+                            <img
+                              src={product.image || "/placeholder.svg"}
+                              alt={product.name}
+                              width={200}
+                              height={200}
+                              className="h-full w-full object-cover"
+                            />
+                          </div>
+                          <CardContent className="p-3">
+                            <div className="text-sm font-medium line-clamp-1">{product.name}</div>
+                            <div className="mt-1 font-bold">{product.price.toLocaleString('vi-VN')}đ</div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
                 </TabsContent>
               </Tabs>
             </CardContent>
@@ -259,15 +315,15 @@ export default function POSPage() {
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center text-lg">
                 <ShoppingCart className="mr-2 h-5 w-5" />
-                Current Order
+                Đơn hàng hiện tại
               </CardTitle>
             </CardHeader>
             <CardContent className="flex-1 overflow-auto">
               {cart.length === 0 ? (
                 <div className="flex h-40 flex-col items-center justify-center text-center text-muted-foreground">
                   <ShoppingCart className="mb-2 h-10 w-10" />
-                  <p>Your cart is empty</p>
-                  <p className="text-sm">Add products by clicking on them</p>
+                  <p>Giỏ hàng trống</p>
+                  <p className="text-sm">Nhấp vào sản phẩm để thêm vào giỏ</p>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -276,7 +332,7 @@ export default function POSPage() {
                       <div className="flex-1">
                         <div className="font-medium">{item.name}</div>
                         <div className="text-sm text-muted-foreground">
-                          ${item.price.toFixed(2)} x {item.quantity}
+                          {item.price.toLocaleString('vi-VN')}đ x {item.quantity}
                         </div>
                       </div>
                       <div className="flex items-center gap-1">
@@ -287,17 +343,17 @@ export default function POSPage() {
                           onClick={() => removeFromCart(item.id)}
                         >
                           <Minus className="h-3 w-3" />
-                          <span className="sr-only">Decrease quantity</span>
+                          <span className="sr-only">Giảm số lượng</span>
                         </Button>
                         <span className="w-8 text-center">{item.quantity}</span>
                         <Button
                           variant="outline"
                           size="icon"
                           className="h-7 w-7"
-                          onClick={() => addToCart(allProducts.find((p) => p.id === item.id)!)}
+                          onClick={() => addToCart(products.find((p) => p.id === item.id)!)}
                         >
                           <Plus className="h-3 w-3" />
-                          <span className="sr-only">Increase quantity</span>
+                          <span className="sr-only">Tăng số lượng</span>
                         </Button>
                         <Button
                           variant="ghost"
@@ -306,7 +362,7 @@ export default function POSPage() {
                           onClick={() => deleteFromCart(item.id)}
                         >
                           <Trash2 className="h-4 w-4" />
-                          <span className="sr-only">Remove item</span>
+                          <span className="sr-only">Xóa sản phẩm</span>
                         </Button>
                       </div>
                     </div>
@@ -316,59 +372,43 @@ export default function POSPage() {
             </CardContent>
             <CardFooter className="flex flex-col border-t p-4">
               <div className="space-y-1.5">
-                <div className="flex justify-between">
-                  <span>Subtotal</span>
-                  <span>${subtotal.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Tax (10%)</span>
-                  <span>${tax.toFixed(2)}</span>
-                </div>
-                <Separator className="my-2" />
                 <div className="flex justify-between font-bold">
-                  <span>Total</span>
-                  <span>${total.toFixed(2)}</span>
+                  <span>Tổng cộng</span>
+                  <span>{total.toLocaleString('vi-VN')}đ</span>
                 </div>
               </div>
               <div className="mt-4 grid grid-cols-2 gap-2">
                 <Button variant="outline" onClick={clearCart} disabled={cart.length === 0}>
-                  Clear
+                  Xóa giỏ
                 </Button>
                 <Dialog open={isCheckoutOpen} onOpenChange={setIsCheckoutOpen}>
                   <DialogTrigger asChild>
-                    <Button disabled={cart.length === 0}>Checkout</Button>
+                    <Button disabled={cart.length === 0} onClick={() => setAmountPaid(total.toString())}>
+                      Thanh toán
+                    </Button>
                   </DialogTrigger>
                   <DialogContent>
                     <DialogHeader>
-                      <DialogTitle>Complete Order</DialogTitle>
-                      <DialogDescription>Enter payment details to complete the order.</DialogDescription>
+                      <DialogTitle>Hoàn tất đơn hàng</DialogTitle>
+                      <DialogDescription>Nhập thông tin thanh toán để hoàn tất đơn hàng.</DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4 py-4">
                       <div className="space-y-2">
-                        <div className="flex justify-between text-sm">
-                          <span>Subtotal</span>
-                          <span>${subtotal.toFixed(2)}</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span>Tax (10%)</span>
-                          <span>${tax.toFixed(2)}</span>
-                        </div>
-                        <Separator />
                         <div className="flex justify-between font-bold">
-                          <span>Total</span>
-                          <span>${total.toFixed(2)}</span>
+                          <span>Tổng cộng</span>
+                          <span>{total.toLocaleString('vi-VN')}đ</span>
                         </div>
                       </div>
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
-                          <span>Amount Paid</span>
+                          <span>Số tiền thanh toán</span>
                           <div className="relative w-32">
                             <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-muted-foreground">
-                              $
+                              đ
                             </span>
                             <Input
                               type="number"
-                              step="0.01"
+                              step="1000"
                               min={total}
                               className="pl-7"
                               value={amountPaid}
@@ -378,17 +418,17 @@ export default function POSPage() {
                         </div>
                         {amountPaid && !isNaN(Number.parseFloat(amountPaid)) && (
                           <div className="flex justify-between">
-                            <span>Change</span>
-                            <span>${Math.max(0, Number.parseFloat(amountPaid) - total).toFixed(2)}</span>
+                            <span>Tiền thừa</span>
+                            <span>{Math.max(0, Number.parseFloat(amountPaid) - total).toLocaleString('vi-VN')}đ</span>
                           </div>
                         )}
                       </div>
                     </div>
                     <DialogFooter>
                       <Button variant="outline" onClick={() => setIsCheckoutOpen(false)}>
-                        Cancel
+                        Hủy
                       </Button>
-                      <Button onClick={handleCheckout}>Complete Order</Button>
+                      <Button onClick={handleCheckout}>Hoàn tất</Button>
                     </DialogFooter>
                   </DialogContent>
                 </Dialog>

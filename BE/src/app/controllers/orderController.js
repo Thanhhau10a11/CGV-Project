@@ -40,8 +40,7 @@ exports.createOrder = async (req, res) => {
           order_id: order.id,
           product_id: item.product_id,
           quantity: item.quantity,
-          unit_price: product.price,
-          subtotal: product.price * item.quantity
+          price: product.price,
         }, { transaction: t });
       })
     );
