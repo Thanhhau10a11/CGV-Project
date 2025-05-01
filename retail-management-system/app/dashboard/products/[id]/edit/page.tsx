@@ -14,21 +14,37 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/components/ui/use-toast"
 
+// Định nghĩa kiểu dữ liệu cho product
+interface Product {
+  id: number
+  name: string
+  code: string
+  category_id: number
+  category_name?: string
+  price: number
+  stock_quantity: number
+  status: string
+  description?: string
+  image_url?: string
+}
+
 // Định nghĩa kiểu dữ liệu cho category
 interface Category {
   id: number
   name: string
 }
 
-export default function AddProductPage() {
+export default function EditProductPage({ params }: { params: { id: string } }) {
   const [user, setUser] = useState<{ role: string } | null>(null)
   const [isMounted, setIsMounted] = useState(false)
   const [categories, setCategories] = useState<Category[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [isLoadingProduct, setIsLoadingProduct] = useState(true)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
   const { toast } = useToast()
+  const productId = params.id
 
   const [formData, setFormData] = useState({
     name: "",
@@ -39,6 +55,58 @@ export default function AddProductPage() {
     description: "",
     status: "selling",
   })
+
+  // Lấy thông tin sản phẩm từ API
+  const fetchProduct = async () => {
+    try {
+      const token = localStorage.getItem("token")
+      if (!token) {
+        toast({
+          variant: "destructive",
+          title: "Lỗi xác thực",
+          description: "Vui lòng đăng nhập lại",
+        })
+        return
+      }
+
+      const response = await fetch(`http://localhost:5000/api/products/${productId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error("Không thể lấy thông tin sản phẩm")
+      }
+
+      const product = await response.json()
+      
+      // Cập nhật form với dữ liệu sản phẩm
+      setFormData({
+        name: product.name,
+        code: product.code,
+        category_id: product.category_id.toString(),
+        price: product.price.toString(),
+        stock_quantity: product.stock_quantity.toString(),
+        description: product.description || "",
+        status: product.status,
+      })
+
+      // Hiển thị ảnh sản phẩm nếu có
+      if (product.image_url) {
+        setImagePreview(product.image_url)
+      }
+    } catch (error) {
+      console.error("Lỗi khi lấy thông tin sản phẩm:", error)
+      toast({
+        variant: "destructive",
+        title: "Lỗi",
+        description: "Không thể lấy thông tin sản phẩm",
+      })
+    } finally {
+      setIsLoadingProduct(false)
+    }
+  }
 
   // Lấy danh sách danh mục từ API
   const fetchCategories = async () => {
@@ -85,11 +153,12 @@ export default function AddProductPage() {
         })
       } else {
         fetchCategories()
+        fetchProduct()
       }
     } else {
       router.push("/login")
     }
-  }, [router, toast])
+  }, [router, toast, productId])
 
   if (!isMounted || !user || user.role !== "admin") {
     return null
@@ -149,8 +218,8 @@ export default function AddProductPage() {
         formDataToSend.append("image", imageFile)
       }
 
-      const response = await fetch("http://localhost:5000/api/products", {
-        method: "POST",
+      const response = await fetch(`http://localhost:5000/api/products/${productId}`, {
+        method: "PUT",
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -159,25 +228,33 @@ export default function AddProductPage() {
 
       if (!response.ok) {
         const errorData = await response.json()
-        throw new Error(errorData.message || "Không thể thêm sản phẩm")
+        throw new Error(errorData.message || "Không thể cập nhật sản phẩm")
       }
 
       toast({
-        title: "Thêm sản phẩm thành công",
-        description: `${formData.name} đã được thêm thành công`,
+        title: "Cập nhật sản phẩm thành công",
+        description: `${formData.name} đã được cập nhật thành công`,
       })
 
       router.push("/dashboard/products")
     } catch (error) {
-      console.error("Lỗi khi thêm sản phẩm:", error)
+      console.error("Lỗi khi cập nhật sản phẩm:", error)
       toast({
         variant: "destructive",
         title: "Lỗi",
-        description: error instanceof Error ? error.message : "Không thể thêm sản phẩm",
+        description: error instanceof Error ? error.message : "Không thể cập nhật sản phẩm",
       })
     } finally {
       setIsLoading(false)
     }
+  }
+
+  if (isLoadingProduct) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <p>Đang tải thông tin sản phẩm...</p>
+      </div>
+    )
   }
 
   return (
@@ -192,13 +269,13 @@ export default function AddProductPage() {
       </div>
 
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">Thêm sản phẩm mới</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Sửa sản phẩm</h1>
       </div>
 
       <Card>
         <CardHeader>
           <CardTitle>Thông tin sản phẩm</CardTitle>
-          <CardDescription>Nhập thông tin chi tiết cho sản phẩm mới bạn muốn thêm vào kho.</CardDescription>
+          <CardDescription>Cập nhật thông tin chi tiết cho sản phẩm.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -273,7 +350,7 @@ export default function AddProductPage() {
                   name="stock_quantity"
                   type="number"
                   min="0"
-                  placeholder="Nhập số lượng tồn kho ban đầu"
+                  placeholder="Nhập số lượng tồn kho"
                   value={formData.stock_quantity}
                   onChange={handleChange}
                   required
@@ -330,7 +407,7 @@ export default function AddProductPage() {
                     onClick={() => fileInputRef.current?.click()}
                   >
                     <Upload className="mr-2 h-4 w-4" />
-                    Tải lên ảnh
+                    Tải lên ảnh mới
                   </Button>
                   {imagePreview && (
                     <Button
@@ -367,7 +444,7 @@ export default function AddProductPage() {
                 <Link href="/dashboard/products">Hủy</Link>
               </Button>
               <Button type="submit" disabled={isLoading}>
-                {isLoading ? "Đang thêm..." : "Thêm sản phẩm"}
+                {isLoading ? "Đang cập nhật..." : "Cập nhật sản phẩm"}
               </Button>
             </div>
           </form>
@@ -375,4 +452,4 @@ export default function AddProductPage() {
       </Card>
     </div>
   )
-}
+} 

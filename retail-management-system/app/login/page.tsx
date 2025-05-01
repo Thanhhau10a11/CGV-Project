@@ -24,28 +24,38 @@ export default function LoginPage() {
     setIsLoading(true)
 
     try {
-      // Simulate login - in a real app, this would be an API call
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      // Gọi API đăng nhập
+      const response = await fetch('http://localhost:5000/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username, password }),
+      })
 
-      // For demo purposes, hardcoded credentials
-      if (username === "admin" && password === "admin123") {
-        localStorage.setItem("user", JSON.stringify({ role: "admin", name: "Admin User" }))
-        router.push("/dashboard")
-      } else if (username === "employee" && password === "employee123") {
-        localStorage.setItem("user", JSON.stringify({ role: "employee", name: "Employee User" }))
+      const data = await response.json()
+
+      if (response.ok) {
+        // Lưu thông tin người dùng và token vào localStorage
+        localStorage.setItem("user", JSON.stringify(data.user))
+        localStorage.setItem("token", data.token)
+        
+        // Chuyển hướng đến trang dashboard
         router.push("/dashboard")
       } else {
+        // Hiển thị thông báo lỗi
         toast({
           variant: "destructive",
-          title: "Login failed",
-          description: "Invalid username or password",
+          title: "Đăng nhập thất bại",
+          description: data.message || "Tên đăng nhập hoặc mật khẩu không đúng",
         })
       }
     } catch (error) {
+      console.error('Login error:', error)
       toast({
         variant: "destructive",
-        title: "Login failed",
-        description: "An error occurred during login",
+        title: "Đăng nhập thất bại",
+        description: "Đã xảy ra lỗi khi đăng nhập",
       })
     } finally {
       setIsLoading(false)
@@ -56,28 +66,28 @@ export default function LoginPage() {
     <div className="flex h-screen w-full items-center justify-center bg-muted/40">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold">Login</CardTitle>
-          <CardDescription>Enter your credentials to access the system</CardDescription>
+          <CardTitle className="text-2xl font-bold">Đăng nhập</CardTitle>
+          <CardDescription>Nhập thông tin đăng nhập để truy cập hệ thống</CardDescription>
         </CardHeader>
         <form onSubmit={handleLogin}>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="username">Username</Label>
+              <Label htmlFor="username">Tên đăng nhập</Label>
               <Input
                 id="username"
-                placeholder="Enter your username"
+                placeholder="Nhập tên đăng nhập"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 required
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">Mật khẩu</Label>
               <div className="relative">
                 <Input
                   id="password"
                   type={showPassword ? "text" : "password"}
-                  placeholder="Enter your password"
+                  placeholder="Nhập mật khẩu"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
@@ -94,7 +104,7 @@ export default function LoginPage() {
                   ) : (
                     <Eye className="h-4 w-4 text-muted-foreground" />
                   )}
-                  <span className="sr-only">{showPassword ? "Hide password" : "Show password"}</span>
+                  <span className="sr-only">{showPassword ? "Ẩn mật khẩu" : "Hiển thị mật khẩu"}</span>
                 </Button>
               </div>
             </div>
@@ -104,12 +114,12 @@ export default function LoginPage() {
               {isLoading ? (
                 <span className="flex items-center gap-1">
                   <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                  Logging in...
+                  Đang đăng nhập...
                 </span>
               ) : (
                 <span className="flex items-center gap-2">
                   <LogIn className="h-4 w-4" />
-                  Login
+                  Đăng nhập
                 </span>
               )}
             </Button>

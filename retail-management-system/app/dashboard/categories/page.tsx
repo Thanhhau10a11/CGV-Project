@@ -20,48 +20,66 @@ import {
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/components/ui/use-toast"
 
-// Sample category data
-const initialCategories = [
-  {
-    id: 1,
-    name: "Food",
-    description: "All food items including popcorn, nachos, hot dogs, etc.",
-    productCount: 12,
-  },
-  {
-    id: 2,
-    name: "Drinks",
-    description: "All beverages including soda, water, juice, etc.",
-    productCount: 8,
-  },
-  {
-    id: 3,
-    name: "Merchandise",
-    description: "Movie-related merchandise including cups, t-shirts, posters, etc.",
-    productCount: 15,
-  },
-  {
-    id: 4,
-    name: "Combo",
-    description: "Combination deals of food and drinks at special prices.",
-    productCount: 5,
-  },
-]
+// Định nghĩa kiểu dữ liệu cho category
+interface Category {
+  id: number
+  name: string
+  description: string
+  productCount?: number
+}
 
 export default function CategoriesPage() {
   const [searchTerm, setSearchTerm] = useState("")
-  const [categories, setCategories] = useState(initialCategories)
+  const [categories, setCategories] = useState<Category[]>([])
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
-  const [currentCategory, setCurrentCategory] = useState<(typeof initialCategories)[0] | null>(null)
+  const [currentCategory, setCurrentCategory] = useState<Category | null>(null)
   const [formData, setFormData] = useState({
     name: "",
     description: "",
   })
   const [user, setUser] = useState<{ role: string } | null>(null)
   const [isMounted, setIsMounted] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
   const { toast } = useToast()
+
+  // Lấy danh sách categories từ API
+  const fetchCategories = async () => {
+    try {
+      const token = localStorage.getItem("token")
+      if (!token) {
+        toast({
+          variant: "destructive",
+          title: "Lỗi xác thực",
+          description: "Vui lòng đăng nhập lại",
+        })
+        return
+      }
+
+      const response = await fetch("http://localhost:5000/api/categories", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error("Không thể lấy danh sách danh mục")
+      }
+
+      const data = await response.json()
+      setCategories(data)
+    } catch (error) {
+      console.error("Lỗi khi lấy danh mục:", error)
+      toast({
+        variant: "destructive",
+        title: "Lỗi",
+        description: "Không thể lấy danh sách danh mục",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   useEffect(() => {
     setIsMounted(true)
@@ -72,9 +90,11 @@ export default function CategoriesPage() {
       if (parsedUser.role !== "admin") {
         toast({
           variant: "destructive",
-          title: "Access denied",
-          description: "You don't have permission to access this page",
+          title: "Truy cập bị từ chối",
+          description: "Bạn không có quyền truy cập trang này",
         })
+      } else {
+        fetchCategories()
       }
     }
   }, [toast])
@@ -92,65 +112,157 @@ export default function CategoriesPage() {
     setFormData((prev) => ({ ...prev, [name]: value }))
   }
 
-  const handleAddCategory = () => {
-    const newCategory = {
-      id: categories.length + 1,
-      name: formData.name,
-      description: formData.description,
-      productCount: 0,
+  const handleAddCategory = async () => {
+    try {
+      const token = localStorage.getItem("token")
+      if (!token) {
+        toast({
+          variant: "destructive",
+          title: "Lỗi xác thực",
+          description: "Vui lòng đăng nhập lại",
+        })
+        return
+      }
+
+      const response = await fetch("http://localhost:5000/api/categories", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          name: formData.name,
+          description: formData.description,
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || "Không thể thêm danh mục")
+      }
+
+      const newCategory = await response.json()
+      setCategories([...categories, newCategory])
+      setIsAddDialogOpen(false)
+      setFormData({
+        name: "",
+        description: "",
+      })
+
+      toast({
+        title: "Thêm danh mục thành công",
+        description: `${formData.name} đã được thêm thành công`,
+      })
+    } catch (error) {
+      console.error("Lỗi khi thêm danh mục:", error)
+      toast({
+        variant: "destructive",
+        title: "Lỗi",
+        description: error instanceof Error ? error.message : "Không thể thêm danh mục",
+      })
     }
-
-    setCategories([...categories, newCategory])
-    setIsAddDialogOpen(false)
-    setFormData({
-      name: "",
-      description: "",
-    })
-
-    toast({
-      title: "Category added",
-      description: `${formData.name} has been added successfully`,
-    })
   }
 
-  const handleEditCategory = () => {
+  const handleEditCategory = async () => {
     if (!currentCategory) return
 
-    const updatedCategories = categories.map((cat) =>
-      cat.id === currentCategory.id
-        ? {
-            ...cat,
-            name: formData.name,
-            description: formData.description,
-          }
-        : cat,
-    )
+    try {
+      const token = localStorage.getItem("token")
+      if (!token) {
+        toast({
+          variant: "destructive",
+          title: "Lỗi xác thực",
+          description: "Vui lòng đăng nhập lại",
+        })
+        return
+      }
 
-    setCategories(updatedCategories)
-    setIsEditDialogOpen(false)
-    setCurrentCategory(null)
+      const response = await fetch(`http://localhost:5000/api/categories/${currentCategory.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          name: formData.name,
+          description: formData.description,
+        }),
+      })
 
-    toast({
-      title: "Category updated",
-      description: `${formData.name} has been updated successfully`,
-    })
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || "Không thể cập nhật danh mục")
+      }
+
+      const updatedCategory = await response.json()
+      const updatedCategories = categories.map((cat) =>
+        cat.id === currentCategory.id ? updatedCategory : cat,
+      )
+
+      setCategories(updatedCategories)
+      setIsEditDialogOpen(false)
+      setCurrentCategory(null)
+
+      toast({
+        title: "Cập nhật danh mục thành công",
+        description: `${formData.name} đã được cập nhật thành công`,
+      })
+    } catch (error) {
+      console.error("Lỗi khi cập nhật danh mục:", error)
+      toast({
+        variant: "destructive",
+        title: "Lỗi",
+        description: error instanceof Error ? error.message : "Không thể cập nhật danh mục",
+      })
+    }
   }
 
-  const handleDeleteCategory = () => {
+  const handleDeleteCategory = async () => {
     if (!currentCategory) return
 
-    const updatedCategories = categories.filter((cat) => cat.id !== currentCategory.id)
-    setCategories(updatedCategories)
-    setIsDeleteDialogOpen(false)
-    setCurrentCategory(null)
+    try {
+      const token = localStorage.getItem("token")
+      if (!token) {
+        toast({
+          variant: "destructive",
+          title: "Lỗi xác thực",
+          description: "Vui lòng đăng nhập lại",
+        })
+        return
+      }
 
-    toast({
-      title: "Category deleted",
-      description: `Category has been deleted successfully`,
-    })
+      const response = await fetch(`http://localhost:5000/api/categories/${currentCategory.id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || "Không thể xóa danh mục")
+      }
+
+      const updatedCategories = categories.filter((cat) => cat.id !== currentCategory.id)
+      setCategories(updatedCategories)
+      setIsDeleteDialogOpen(false)
+      setCurrentCategory(null)
+
+      toast({
+        title: "Xóa danh mục thành công",
+        description: "Danh mục đã được xóa thành công",
+      })
+    } catch (error) {
+      console.error("Lỗi khi xóa danh mục:", error)
+      toast({
+        variant: "destructive",
+        title: "Lỗi",
+        description: error instanceof Error ? error.message : "Không thể xóa danh mục",
+      })
+    }
   }
 
-  const openEditDialog = (category: (typeof initialCategories)[0]) => {
+  const openEditDialog = (category: Category) => {
     setCurrentCategory(category)
     setFormData({
       name: category.name,
@@ -159,7 +271,7 @@ export default function CategoriesPage() {
     setIsEditDialogOpen(true)
   }
 
-  const openDeleteDialog = (category: (typeof initialCategories)[0]) => {
+  const openDeleteDialog = (category: Category) => {
     setCurrentCategory(category)
     setIsDeleteDialogOpen(true)
   }
@@ -167,46 +279,46 @@ export default function CategoriesPage() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">Product Categories</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Danh mục sản phẩm</h1>
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
             <Button>
               <Plus className="mr-2 h-4 w-4" />
-              Add Category
+              Thêm danh mục
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Add New Category</DialogTitle>
-              <DialogDescription>Enter the details of the new product category.</DialogDescription>
+              <DialogTitle>Thêm danh mục mới</DialogTitle>
+              <DialogDescription>Nhập thông tin cho danh mục sản phẩm mới.</DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="grid gap-2">
-                <Label htmlFor="name">Category Name</Label>
+                <Label htmlFor="name">Tên danh mục</Label>
                 <Input
                   id="name"
                   name="name"
                   value={formData.name}
                   onChange={handleInputChange}
-                  placeholder="Enter category name"
+                  placeholder="Nhập tên danh mục"
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="description">Description</Label>
+                <Label htmlFor="description">Mô tả</Label>
                 <Input
                   id="description"
                   name="description"
                   value={formData.description}
                   onChange={handleInputChange}
-                  placeholder="Enter category description"
+                  placeholder="Nhập mô tả danh mục"
                 />
               </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
-                Cancel
+                Hủy
               </Button>
-              <Button onClick={handleAddCategory}>Add Category</Button>
+              <Button onClick={handleAddCategory}>Thêm danh mục</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -220,7 +332,7 @@ export default function CategoriesPage() {
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
                   type="search"
-                  placeholder="Search categories..."
+                  placeholder="Tìm kiếm danh mục..."
                   className="pl-8"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
@@ -232,17 +344,23 @@ export default function CategoriesPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead className="text-right">Products</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableHead>Tên</TableHead>
+                    <TableHead>Mô tả</TableHead>
+                    <TableHead className="text-right">Sản phẩm</TableHead>
+                    <TableHead className="text-right">Thao tác</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredCategories.length === 0 ? (
+                  {isLoading ? (
                     <TableRow>
                       <TableCell colSpan={4} className="h-24 text-center">
-                        No categories found.
+                        Đang tải dữ liệu...
+                      </TableCell>
+                    </TableRow>
+                  ) : filteredCategories.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={4} className="h-24 text-center">
+                        Không tìm thấy danh mục nào.
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -250,21 +368,21 @@ export default function CategoriesPage() {
                       <TableRow key={category.id}>
                         <TableCell className="font-medium">{category.name}</TableCell>
                         <TableCell>{category.description}</TableCell>
-                        <TableCell className="text-right">{category.productCount}</TableCell>
+                        <TableCell className="text-right">{category.productCount || 0}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
                             <Button variant="ghost" size="icon" onClick={() => openEditDialog(category)}>
                               <Edit className="h-4 w-4" />
-                              <span className="sr-only">Edit</span>
+                              <span className="sr-only">Sửa</span>
                             </Button>
                             <Button
                               variant="ghost"
                               size="icon"
                               onClick={() => openDeleteDialog(category)}
-                              disabled={category.productCount > 0}
+                              disabled={!!category.productCount && category.productCount > 0}
                             >
                               <Trash2 className="h-4 w-4" />
-                              <span className="sr-only">Delete</span>
+                              <span className="sr-only">Xóa</span>
                             </Button>
                           </div>
                         </TableCell>
@@ -282,16 +400,16 @@ export default function CategoriesPage() {
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit Category</DialogTitle>
-            <DialogDescription>Update the category's information.</DialogDescription>
+            <DialogTitle>Sửa danh mục</DialogTitle>
+            <DialogDescription>Cập nhật thông tin danh mục.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="edit-name">Category Name</Label>
+              <Label htmlFor="edit-name">Tên danh mục</Label>
               <Input id="edit-name" name="name" value={formData.name} onChange={handleInputChange} />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="edit-description">Description</Label>
+              <Label htmlFor="edit-description">Mô tả</Label>
               <Input
                 id="edit-description"
                 name="description"
@@ -302,9 +420,9 @@ export default function CategoriesPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
-              Cancel
+              Hủy
             </Button>
-            <Button onClick={handleEditCategory}>Save Changes</Button>
+            <Button onClick={handleEditCategory}>Lưu thay đổi</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -313,17 +431,17 @@ export default function CategoriesPage() {
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete Category</DialogTitle>
+            <DialogTitle>Xóa danh mục</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete this category? This action cannot be undone.
+              Bạn có chắc chắn muốn xóa danh mục này? Hành động này không thể hoàn tác.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
-              Cancel
+              Hủy
             </Button>
             <Button variant="destructive" onClick={handleDeleteCategory}>
-              Delete
+              Xóa
             </Button>
           </DialogFooter>
         </DialogContent>

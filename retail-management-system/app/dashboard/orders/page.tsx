@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Download, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -9,140 +10,192 @@ import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useToast } from "@/components/ui/use-toast"
 
-// Sample order data
-const orders = [
-  {
-    id: 1001,
-    date: "2023-04-28T14:30:00",
-    customer: "Walk-in Customer",
-    total: 18.97,
-    items: 3,
-    status: "Completed",
-  },
-  {
-    id: 1002,
-    date: "2023-04-28T15:45:00",
-    customer: "Walk-in Customer",
-    total: 24.99,
-    items: 4,
-    status: "Completed",
-  },
-  {
-    id: 1003,
-    date: "2023-04-28T16:20:00",
-    customer: "Walk-in Customer",
-    total: 12.48,
-    items: 2,
-    status: "Completed",
-  },
-  {
-    id: 1004,
-    date: "2023-04-28T17:10:00",
-    customer: "Walk-in Customer",
-    total: 32.97,
-    items: 5,
-    status: "Completed",
-  },
-  {
-    id: 1005,
-    date: "2023-04-28T18:05:00",
-    customer: "Walk-in Customer",
-    total: 9.99,
-    items: 1,
-    status: "Completed",
-  },
-  {
-    id: 1006,
-    date: "2023-04-29T10:15:00",
-    customer: "Walk-in Customer",
-    total: 27.96,
-    items: 3,
-    status: "Completed",
-  },
-  {
-    id: 1007,
-    date: "2023-04-29T11:30:00",
-    customer: "Walk-in Customer",
-    total: 15.98,
-    items: 2,
-    status: "Completed",
-  },
-  {
-    id: 1008,
-    date: "2023-04-29T12:45:00",
-    customer: "Walk-in Customer",
-    total: 42.95,
-    items: 6,
-    status: "Completed",
-  },
-  {
-    id: 1009,
-    date: "2023-04-29T13:20:00",
-    customer: "Walk-in Customer",
-    total: 8.99,
-    items: 1,
-    status: "Completed",
-  },
-  {
-    id: 1010,
-    date: "2023-04-29T14:10:00",
-    customer: "Walk-in Customer",
-    total: 21.97,
-    items: 3,
-    status: "Completed",
-  },
-]
+// Định nghĩa kiểu dữ liệu cho order
+interface Order {
+  id: number
+  user_id: number
+  total_amount: string
+  status: string
+  payment_method: string
+  note: string
+  createdAt: string
+  updatedAt: string
+  orderDetails: any[]
+  user: {
+    id: number
+    username: string
+    full_name: string
+    role: string
+  }
+}
+
+// Định nghĩa kiểu dữ liệu cho response API
+interface OrdersResponse {
+  total: number
+  totalPages: number
+  currentPage: number
+  orders: Order[]
+}
 
 export default function OrdersPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedStatus, setSelectedStatus] = useState<string>("all")
   const [dateFilter, setDateFilter] = useState<string>("all")
   const [isMounted, setIsMounted] = useState(false)
+  const [orders, setOrders] = useState<Order[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [pagination, setPagination] = useState({
+    total: 0,
+    totalPages: 0,
+    currentPage: 1,
+  })
+  const { toast } = useToast()
+  const router = useRouter()
+
+  // Lấy danh sách đơn hàng từ API
+  const fetchOrders = async () => {
+    try {
+      const token = localStorage.getItem("token")
+      if (!token) {
+        toast({
+          variant: "destructive",
+          title: "Lỗi xác thực",
+          description: "Vui lòng đăng nhập lại",
+        })
+        return
+      }
+
+      // Xây dựng URL với các tham số lọc
+      let url = "http://localhost:5000/api/orders?"
+      if (searchTerm) url += `id=${encodeURIComponent(searchTerm)}&`
+      if (selectedStatus !== "all") url += `status=${selectedStatus}&`
+      
+      // Thêm tham số phân trang
+      url += `page=${pagination.currentPage}&limit=10`
+
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error("Không thể lấy danh sách đơn hàng")
+      }
+
+      const data = await response.json()
+      console.log("Dữ liệu đơn hàng:", data)
+      
+      // Kiểm tra cấu trúc dữ liệu trả về
+      if (data && typeof data === 'object' && 'orders' in data) {
+        // API trả về đối tượng có cấu trúc { total, totalPages, currentPage, orders }
+        setOrders(Array.isArray(data.orders) ? data.orders : [])
+        setPagination({
+          total: data.total || 0,
+          totalPages: data.totalPages || 0,
+          currentPage: data.currentPage || 1,
+        })
+      } else if (Array.isArray(data)) {
+        // API trả về mảng đơn hàng trực tiếp
+        setOrders(data)
+      } else {
+        // Dữ liệu không đúng định dạng
+        setOrders([])
+        console.error("Dữ liệu API không đúng định dạng:", data)
+      }
+    } catch (error) {
+      console.error("Lỗi khi lấy đơn hàng:", error)
+      toast({
+        variant: "destructive",
+        title: "Lỗi",
+        description: "Không thể lấy danh sách đơn hàng",
+      })
+      // Đặt orders là mảng rỗng khi có lỗi
+      setOrders([])
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   useEffect(() => {
     setIsMounted(true)
+    const storedUser = localStorage.getItem("user")
+    if (storedUser) {
+      fetchOrders()
+    } else {
+      router.push("/login")
+    }
   }, [])
+
+  // Cập nhật danh sách đơn hàng khi thay đổi bộ lọc
+  useEffect(() => {
+    if (isMounted) {
+      fetchOrders()
+    }
+  }, [searchTerm, selectedStatus, pagination.currentPage])
 
   if (!isMounted) {
     return null
   }
 
-  const filteredOrders = orders.filter((order) => {
-    const matchesSearch = order.id.toString().includes(searchTerm)
-    const matchesStatus = selectedStatus === "all" || order.status === selectedStatus
+  const statuses = ["completed", "pending", "cancelled"]
 
-    let matchesDate = true
-    const orderDate = new Date(order.date)
-    const today = new Date()
-
-    if (dateFilter === "today") {
-      matchesDate =
-        orderDate.getDate() === today.getDate() &&
-        orderDate.getMonth() === today.getMonth() &&
-        orderDate.getFullYear() === today.getFullYear()
-    } else if (dateFilter === "yesterday") {
-      const yesterday = new Date(today)
-      yesterday.setDate(yesterday.getDate() - 1)
-      matchesDate =
-        orderDate.getDate() === yesterday.getDate() &&
-        orderDate.getMonth() === yesterday.getMonth() &&
-        orderDate.getFullYear() === yesterday.getFullYear()
-    } else if (dateFilter === "week") {
-      const weekAgo = new Date(today)
-      weekAgo.setDate(weekAgo.getDate() - 7)
-      matchesDate = orderDate >= weekAgo
+  // Hàm chuyển đổi trạng thái sang tiếng Việt
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case "completed":
+        return "Hoàn thành"
+      case "pending":
+        return "Đang xử lý"
+      case "cancelled":
+        return "Đã hủy"
+      default:
+        return status
     }
+  }
 
-    return matchesSearch && matchesStatus && matchesDate
-  })
+  // Hàm lấy màu cho badge dựa trên trạng thái
+  const getStatusVariant = (status: string) => {
+    switch (status) {
+      case "completed":
+        return "default"
+      case "pending":
+        return "outline"
+      case "cancelled":
+        return "destructive"
+      default:
+        return "default"
+    }
+  }
 
-  const statuses = ["Completed", "Processing", "Cancelled"]
+  // Hàm định dạng ngày tháng
+  const formatDate = (dateString: string) => {
+    if (!dateString) return "Không có ngày"
+    try {
+      return new Date(dateString).toLocaleString('vi-VN')
+    } catch (error) {
+      return dateString
+    }
+  }
+
+  // Hàm định dạng tiền tệ
+  const formatCurrency = (amount: string | number | undefined | null) => {
+    if (amount === undefined || amount === null) return "0đ"
+    const numericAmount = typeof amount === 'string' ? parseFloat(amount) : amount
+    return numericAmount.toLocaleString('vi-VN') + "đ"
+  }
+
+  // Hàm xử lý khi chuyển trang
+  const handlePageChange = (page: number) => {
+    setPagination(prev => ({ ...prev, currentPage: page }))
+  }
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">Orders</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Đơn hàng</h1>
       </div>
 
       <Card>
@@ -153,7 +206,7 @@ export default function OrdersPage() {
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
                   type="search"
-                  placeholder="Search order by ID..."
+                  placeholder="Tìm kiếm đơn hàng theo ID..."
                   className="pl-8"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
@@ -162,13 +215,13 @@ export default function OrdersPage() {
               <div className="flex flex-wrap gap-2">
                 <Select value={selectedStatus} onValueChange={setSelectedStatus}>
                   <SelectTrigger className="w-[150px]">
-                    <SelectValue placeholder="Status" />
+                    <SelectValue placeholder="Trạng thái" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Statuses</SelectItem>
+                    <SelectItem value="all">Tất cả trạng thái</SelectItem>
                     {statuses.map((status) => (
                       <SelectItem key={status} value={status}>
-                        {status}
+                        {getStatusLabel(status)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -176,19 +229,19 @@ export default function OrdersPage() {
 
                 <Select value={dateFilter} onValueChange={setDateFilter}>
                   <SelectTrigger className="w-[150px]">
-                    <SelectValue placeholder="Date" />
+                    <SelectValue placeholder="Ngày" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Dates</SelectItem>
-                    <SelectItem value="today">Today</SelectItem>
-                    <SelectItem value="yesterday">Yesterday</SelectItem>
-                    <SelectItem value="week">Last 7 Days</SelectItem>
+                    <SelectItem value="all">Tất cả ngày</SelectItem>
+                    <SelectItem value="today">Hôm nay</SelectItem>
+                    <SelectItem value="yesterday">Hôm qua</SelectItem>
+                    <SelectItem value="week">7 ngày qua</SelectItem>
                   </SelectContent>
                 </Select>
 
                 <Button variant="outline" size="icon">
                   <Download className="h-4 w-4" />
-                  <span className="sr-only">Download order list</span>
+                  <span className="sr-only">Tải danh sách đơn hàng</span>
                 </Button>
               </div>
             </div>
@@ -197,47 +250,49 @@ export default function OrdersPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Order ID</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Customer</TableHead>
-                    <TableHead className="text-right">Items</TableHead>
-                    <TableHead className="text-right">Total</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableHead>Mã đơn hàng</TableHead>
+                    <TableHead>Ngày</TableHead>
+                    <TableHead>Khách hàng</TableHead>
+                    <TableHead className="text-right">Số sản phẩm</TableHead>
+                    <TableHead className="text-right">Tổng tiền</TableHead>
+                    <TableHead>Trạng thái</TableHead>
+                    <TableHead className="text-right">Thao tác</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredOrders.length === 0 ? (
+                  {isLoading ? (
                     <TableRow>
                       <TableCell colSpan={7} className="h-24 text-center">
-                        No orders found.
+                        Đang tải dữ liệu...
+                      </TableCell>
+                    </TableRow>
+                  ) : orders.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="h-24 text-center">
+                        Không tìm thấy đơn hàng nào.
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filteredOrders.map((order) => (
+                    orders.map((order) => (
                       <TableRow key={order.id}>
                         <TableCell className="font-medium">#{order.id}</TableCell>
-                        <TableCell>{new Date(order.date).toLocaleString()}</TableCell>
-                        <TableCell>{order.customer}</TableCell>
-                        <TableCell className="text-right">{order.items}</TableCell>
-                        <TableCell className="text-right">${order.total.toFixed(2)}</TableCell>
                         <TableCell>
-                          <Badge
-                            variant={
-                              order.status === "Completed"
-                                ? "default"
-                                : order.status === "Processing"
-                                  ? "outline"
-                                  : "destructive"
-                            }
-                          >
-                            {order.status}
+                          {formatDate(order.createdAt)}
+                        </TableCell>
+                        <TableCell>{order.user?.full_name || 'Khách lẻ'}</TableCell>
+                        <TableCell className="text-right">{order.orderDetails?.length || 0}</TableCell>
+                        <TableCell className="text-right">
+                          {formatCurrency(order.total_amount)}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={getStatusVariant(order.status)}>
+                            {getStatusLabel(order.status)}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right">
                           <Link href={`/dashboard/orders/${order.id}`}>
                             <Button variant="ghost" size="sm">
-                              View
+                              Xem
                             </Button>
                           </Link>
                         </TableCell>
@@ -247,6 +302,40 @@ export default function OrdersPage() {
                 </TableBody>
               </Table>
             </div>
+            
+            {/* Phân trang */}
+            {pagination.totalPages > 1 && (
+              <div className="flex items-center justify-center space-x-2 py-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(pagination.currentPage - 1)}
+                  disabled={pagination.currentPage === 1}
+                >
+                  Trước
+                </Button>
+                <div className="flex items-center space-x-1">
+                  {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map((page) => (
+                    <Button
+                      key={page}
+                      variant={page === pagination.currentPage ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => handlePageChange(page)}
+                    >
+                      {page}
+                    </Button>
+                  ))}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(pagination.currentPage + 1)}
+                  disabled={pagination.currentPage === pagination.totalPages}
+                >
+                  Sau
+                </Button>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

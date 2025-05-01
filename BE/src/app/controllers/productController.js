@@ -68,9 +68,52 @@ exports.getProductById = async (req, res) => {
   }
 };
 
+// exports.createProduct = async (req, res) => {
+//   try {
+//     const product = await Product.create(req.body);
+//     const productWithCategory = await Product.findByPk(product.id, {
+//       include: [{ model: Category, as: 'category' }]
+//     });
+//     res.status(201).json(productWithCategory);
+//   } catch (error) {
+//     console.error('Create product error:', error);
+//     res.status(500).json({ message: 'Lỗi server' });
+//   }
+// };
+
+// exports.updateProduct = async (req, res) => {
+//   try {
+//     const [updated] = await Product.update(req.body, {
+//       where: { id: req.params.id }
+//     });
+
+//     if (!updated) {
+//       return res.status(404).json({ message: 'Không tìm thấy sản phẩm' });
+//     }
+
+//     const updatedProduct = await Product.findByPk(req.params.id, {
+//       include: [{ model: Category, as: 'category' }]
+//     });
+//     res.json(updatedProduct);
+//   } catch (error) {
+//     console.error('Update product error:', error);
+//     res.status(500).json({ message: 'Lỗi server' });
+//   }
+// };
+
 exports.createProduct = async (req, res) => {
   try {
-    const product = await Product.create(req.body);
+    console.log('Dữ liệu request khi tạo sản phẩm:', req.body);
+    console.log('File được tải lên (nếu có):', req.file); // Log thông tin về file đã tải
+
+    const productData = { ...req.body };
+
+    if (req.file) {
+      productData.image = req.file.filename; // Lưu tên file vào thuộc tính image
+      console.log('Tên file đã lưu:', req.file.filename);
+    }
+
+    const product = await Product.create(productData);
     const productWithCategory = await Product.findByPk(product.id, {
       include: [{ model: Category, as: 'category' }]
     });
@@ -83,7 +126,17 @@ exports.createProduct = async (req, res) => {
 
 exports.updateProduct = async (req, res) => {
   try {
-    const [updated] = await Product.update(req.body, {
+    console.log('Dữ liệu request khi cập nhật sản phẩm:', req.body);
+    console.log('File được tải lên (nếu có):', req.file); // Log thông tin về file đã tải
+
+    const productData = { ...req.body };
+
+    if (req.file) {
+      productData.image = req.file.filename; // Lưu tên file vào thuộc tính image
+      console.log('Tên file đã cập nhật:', req.file.filename);
+    }
+
+    const [updated] = await Product.update(productData, {
       where: { id: req.params.id }
     });
 
