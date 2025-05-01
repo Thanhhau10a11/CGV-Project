@@ -252,7 +252,7 @@ export default function OrdersPage() {
                   <TableRow>
                     <TableHead>Mã đơn hàng</TableHead>
                     <TableHead>Ngày</TableHead>
-                    <TableHead>Khách hàng</TableHead>
+                    <TableHead>Người thực hiện</TableHead>
                     <TableHead className="text-right">Số sản phẩm</TableHead>
                     <TableHead className="text-right">Tổng tiền</TableHead>
                     <TableHead>Trạng thái</TableHead>
